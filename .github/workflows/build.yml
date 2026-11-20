@@ -1,8 +1,8 @@
- concurrency: name: Build SimpleGrassFlower
+name: Build SimpleGrassFlower
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -16,6 +16,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Works whether the source is committed as extracted files or only as a .zip.
+      - name: Locate project (xmake.lua)
+        id: proj
+        shell: bash
+        run: |
+          find_xmake() {
+            find . -name xmake.lua \
+              -not -path "./.git/*" -not -path "*/build/*" \
+              -not -path "*/.xmake/*" -not -path "./dist/*" \
+              | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-
+          }
+
+          FILE=$(find_xmake)
+
+          if [ -z "$FILE" ]; then
+            echo "xmake.lua not found as a file, looking inside .zip files..."
+            while IFS= read -r -d '' ZIP; do
+              if unzip -Z1 "$ZIP" 2>/dev/null | grep -qE '(^|/)xmake\.lua$'; then
+                echo "Found xmake.lua inside: $ZIP"
+                rm -rf ./_from_zip
+                mkdir -p ./_from_zip
+                unzip -q -o "$ZIP" -d ./_from_zip
+                break
+              fi
+            done < <(find . -name "*.zip" -not -path "./.git/*" -not -path "./_from_zip/*" -print0)
+            FILE=$(find_xmake)
+          fi
+
+          if [ -z "$FILE" ]; then
+            echo "::error::xmake.lua not found in the repository or inside any .zip"
+            find . -not -path "./.git/*" | head -50
+            exit 1
+          fi
+
+          DIR=$(dirname "$FILE")
+          echo "Project dir: $DIR"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
       - name: Setup Android NDK r28c
         id: ndk
         uses: nttld/setup-ndk@v1
@@ -26,43 +64,6 @@ jobs:
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
-
-      - name: Locate xmake.lua
-        id: proj
-        shell: bash
-        run: |
-          find_xmake() {
-            # Shallowest xmake.lua in the repo (root or any subfolder).
-            find . -name xmake.lua \
-              -not -path "./.git/*" -not -path "*/build/*" \
-              -not -path "*/.xmake/*" -not -path "./dist/*" \
-              | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-
-          }
-
-          FILE=$(find_xmake)
-
-          # Fallback: the source was committed as a .zip instead of extracted files.
-          if [ -z "$FILE" ]; then
-            mapfile -t ZIPS < <(find . -maxdepth 3 -name "*.zip" -not -path "./.git/*")
-            for Z in "${ZIPS[@]}"; do
-              if unzip -Z1 "$Z" 2>/dev/null | grep -qE '(^|/)xmake\.lua$'; then
-                echo "::warning::xmake.lua not found in repo, but it is inside $Z -> extracting it for this build. Commit the extracted files to fix this permanently."
-                unzip -q -o "$Z" -d ./_from_zip
-                break
-              fi
-            done
-            FILE=$(find_xmake)
-          fi
-
-          if [ -z "$FILE" ]; then
-            echo "::error::xmake.lua not found anywhere in the repository (also not inside any .zip)"
-            find . -not -path "./.git/*" | head -50
-            exit 1
-          fi
-
-          DIR=$(dirname "$FILE")
-          echo "Found $FILE -> project dir: $DIR"
-          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
 
       - name: Configure
         working-directory: ${{ steps.proj.outputs.dir }}
