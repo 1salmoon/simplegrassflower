@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Find project
+        id: proj
+        run: |
+          file="$(find . -name xmake.lua -not -path './.xmake/*' | head -n1)"
+          if [ -z "$file" ]; then
+            echo "xmake.lua not found. Files in repo:"
+            find . -maxdepth 3 -not -path './.git/*' | sort
+            exit 1
+          fi
+          echo "dir=$(dirname "$file")" >> "$GITHUB_OUTPUT"
+          echo "Project dir: $(dirname "$file")"
+
       - name: Setup Android NDK r28c
         id: ndk
         uses: nttld/setup-ndk@v1
@@ -28,16 +40,18 @@ jobs:
           xmake-version: latest
 
       - name: Configure
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: xmake f -y -p android -a arm64-v8a -m release --ndk="${{ steps.ndk.outputs.ndk-path }}"
 
       - name: Build
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: xmake -y
 
       - name: Collect outputs
         run: |
           mkdir -p dist
-          find build -name "SimpleFlowersGrass.levipack" -exec cp {} dist/ \;
-          find build -name "libSimpleFlowersGrass.so" -exec cp {} dist/ \;
+          find . -path ./dist -prune -o -name "SimpleFlowersGrass.levipack" -print -exec cp {} dist/ \;
+          find . -path ./dist -prune -o -name "libSimpleFlowersGrass.so" -print -exec cp {} dist/ \;
           ls -la dist
           test -f dist/SimpleFlowersGrass.levipack
 
