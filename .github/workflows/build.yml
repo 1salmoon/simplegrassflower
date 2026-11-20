@@ -30,11 +30,24 @@ jobs:
       - name: Locate xmake.lua
         id: proj
         run: |
-          # Find the shallowest xmake.lua anywhere in the repo (root or a subfolder).
-          FILE=$(find . -name xmake.lua -not -path "./.git/*" -not -path "*/build/*" -not -path "*/.xmake/*" \
-                 | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-)
+          find_xmake() {
+            find . -name xmake.lua -not -path "./.git/*" -not -path "*/build/*" -not -path "*/.xmake/*" \
+              | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-
+          }
+          FILE=$(find_xmake)
           if [ -z "$FILE" ]; then
-            echo "::error::xmake.lua not found anywhere in the repository"
+            # Fallback: the repo may contain the source as a .zip that was never extracted.
+            for Z in $(find . -name "*.zip" -not -path "./.git/*"); do
+              if unzip -l "$Z" | grep -q "xmake.lua"; then
+                echo "No xmake.lua in repo, extracting $Z"
+                unzip -q -o "$Z" -d "_extracted_src"
+                break
+              fi
+            done
+            FILE=$(find_xmake)
+          fi
+          if [ -z "$FILE" ]; then
+            echo "::error::xmake.lua not found anywhere in the repository (or inside any .zip)"
             find . -not -path "./.git/*" | head -50
             exit 1
           fi
