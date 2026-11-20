@@ -1,4 +1,4 @@
-name: Build SimpleGrassFlower
+ concurrency: name: Build SimpleGrassFlower
 
 on:
   push:
