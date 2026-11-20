@@ -1,0 +1,54 @@
+name: Build SimpleFlowersGrass
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Android NDK r28c
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
+
+      - name: Configure
+        run: xmake f -y -p android -a arm64-v8a -m release --ndk="${{ steps.ndk.outputs.ndk-path }}"
+
+      - name: Build
+        run: xmake -y
+
+      - name: Collect outputs
+        run: |
+          mkdir -p dist
+          find build -name "SimpleFlowersGrass.levipack" -exec cp {} dist/ \;
+          find build -name "libSimpleFlowersGrass.so" -exec cp {} dist/ \;
+          ls -la dist
+          test -f dist/SimpleFlowersGrass.levipack
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpleFlowersGrass
+          path: dist/*
+
+      - name: Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
