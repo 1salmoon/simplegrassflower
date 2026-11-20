@@ -27,19 +27,37 @@ jobs:
         with:
           xmake-version: latest
 
+      - name: Locate xmake.lua
+        id: proj
+        run: |
+          # Find the shallowest xmake.lua anywhere in the repo (root or a subfolder).
+          FILE=$(find . -name xmake.lua -not -path "./.git/*" -not -path "*/build/*" -not -path "*/.xmake/*" \
+                 | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-)
+          if [ -z "$FILE" ]; then
+            echo "::error::xmake.lua not found anywhere in the repository"
+            find . -not -path "./.git/*" | head -50
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "Found $FILE -> project dir: $DIR"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
       - name: Configure
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: xmake f -y -p android -a arm64-v8a -m release --ndk="${{ steps.ndk.outputs.ndk-path }}"
 
       - name: Build
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: xmake -y
 
       - name: Collect outputs
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: |
-          mkdir -p dist
-          find build -name "SimpleFlowersGrass.levipack" -exec cp {} dist/ \;
-          find build -name "libSimpleFlowersGrass.so" -exec cp {} dist/ \;
-          ls -la dist
-          test -f dist/SimpleFlowersGrass.levipack
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          find build -name "SimpleFlowersGrass.levipack" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
+          find build -name "libSimpleFlowersGrass.so" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
+          ls -la "$GITHUB_WORKSPACE/dist"
+          test -f "$GITHUB_WORKSPACE/dist/SimpleFlowersGrass.levipack"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
