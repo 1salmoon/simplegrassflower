@@ -16,32 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip source
-        run: |
-          mkdir -p _src
-          found=0
-          for z in *.zip; do
-            if [ -f "$z" ]; then
-              unzip -o -q "$z" -d _src
-              found=1
-            fi
-          done
-          if [ "$found" = "0" ]; then
-            echo "No zip in repo root, using repo files as-is"
-          fi
-          find . -maxdepth 3 -not -path './.git/*' | sort
-
-      - name: Find project
-        id: proj
-        run: |
-          file="$(find . -name xmake.lua -not -path './.xmake/*' -not -path './.git/*' | head -n1)"
-          if [ -z "$file" ]; then
-            echo "xmake.lua not found"
-            exit 1
-          fi
-          echo "dir=$(dirname "$file")" >> "$GITHUB_OUTPUT"
-          echo "Project dir: $(dirname "$file")"
-
       - name: Setup Android NDK r28c
         id: ndk
         uses: nttld/setup-ndk@v1
@@ -54,18 +28,16 @@ jobs:
           xmake-version: latest
 
       - name: Configure
-        working-directory: ${{ steps.proj.outputs.dir }}
         run: xmake f -y -p android -a arm64-v8a -m release --ndk="${{ steps.ndk.outputs.ndk-path }}"
 
       - name: Build
-        working-directory: ${{ steps.proj.outputs.dir }}
         run: xmake -y
 
       - name: Collect outputs
         run: |
           mkdir -p dist
-          find . -path ./dist -prune -o -name "SimpleFlowersGrass.levipack" -print -exec cp {} dist/ \;
-          find . -path ./dist -prune -o -name "libSimpleFlowersGrass.so" -print -exec cp {} dist/ \;
+          find build -name "SimpleFlowersGrass.levipack" -exec cp {} dist/ \;
+          find build -name "libSimpleFlowersGrass.so" -exec cp {} dist/ \;
           ls -la dist
           test -f dist/SimpleFlowersGrass.levipack
 
@@ -74,6 +46,7 @@ jobs:
         with:
           name: SimpleFlowersGrass
           path: dist/*
+          if-no-files-found: error
 
       - name: Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
