@@ -1,4 +1,5 @@
-name: Build SimpleFlowersGrass
+
+name: Build SimpleGrassFlower
 
 on:
   push:
@@ -30,24 +31,11 @@ jobs:
       - name: Locate xmake.lua
         id: proj
         run: |
-          find_xmake() {
-            find . -name xmake.lua -not -path "./.git/*" -not -path "*/build/*" -not -path "*/.xmake/*" \
-              | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-
-          }
-          FILE=$(find_xmake)
+          # Find the shallowest xmake.lua anywhere in the repo (root or a subfolder).
+          FILE=$(find . -name xmake.lua -not -path "./.git/*" -not -path "*/build/*" -not -path "*/.xmake/*" \
+                 | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-)
           if [ -z "$FILE" ]; then
-            # Fallback: the repo may contain the source as a .zip that was never extracted.
-            for Z in $(find . -name "*.zip" -not -path "./.git/*"); do
-              if unzip -l "$Z" | grep -q "xmake.lua"; then
-                echo "No xmake.lua in repo, extracting $Z"
-                unzip -q -o "$Z" -d "_extracted_src"
-                break
-              fi
-            done
-            FILE=$(find_xmake)
-          fi
-          if [ -z "$FILE" ]; then
-            echo "::error::xmake.lua not found anywhere in the repository (or inside any .zip)"
+            echo "::error::xmake.lua not found anywhere in the repository"
             find . -not -path "./.git/*" | head -50
             exit 1
           fi
@@ -67,15 +55,15 @@ jobs:
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          find build -name "SimpleFlowersGrass.levipack" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
-          find build -name "libSimpleFlowersGrass.so" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
+          find build -name "SimpleGrassFlower.levipack" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
+          find build -name "libSimpleGrassFlower.so" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
           ls -la "$GITHUB_WORKSPACE/dist"
-          test -f "$GITHUB_WORKSPACE/dist/SimpleFlowersGrass.levipack"
+          test -f "$GITHUB_WORKSPACE/dist/SimpleGrassFlower.levipack"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SimpleFlowersGrass
+          name: SimpleGrassFlower
           path: dist/*
           if-no-files-found: error
 
