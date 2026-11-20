@@ -1,4 +1,3 @@
-
 name: Build SimpleGrassFlower
 
 on:
@@ -30,15 +29,37 @@ jobs:
 
       - name: Locate xmake.lua
         id: proj
+        shell: bash
         run: |
-          # Find the shallowest xmake.lua anywhere in the repo (root or a subfolder).
-          FILE=$(find . -name xmake.lua -not -path "./.git/*" -not -path "*/build/*" -not -path "*/.xmake/*" \
-                 | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-)
+          find_xmake() {
+            # Shallowest xmake.lua in the repo (root or any subfolder).
+            find . -name xmake.lua \
+              -not -path "./.git/*" -not -path "*/build/*" \
+              -not -path "*/.xmake/*" -not -path "./dist/*" \
+              | awk '{ print gsub("/","/") " " $0 }' | sort -n | head -n1 | cut -d' ' -f2-
+          }
+
+          FILE=$(find_xmake)
+
+          # Fallback: the source was committed as a .zip instead of extracted files.
           if [ -z "$FILE" ]; then
-            echo "::error::xmake.lua not found anywhere in the repository"
+            mapfile -t ZIPS < <(find . -maxdepth 3 -name "*.zip" -not -path "./.git/*")
+            for Z in "${ZIPS[@]}"; do
+              if unzip -Z1 "$Z" 2>/dev/null | grep -qE '(^|/)xmake\.lua$'; then
+                echo "::warning::xmake.lua not found in repo, but it is inside $Z -> extracting it for this build. Commit the extracted files to fix this permanently."
+                unzip -q -o "$Z" -d ./_from_zip
+                break
+              fi
+            done
+            FILE=$(find_xmake)
+          fi
+
+          if [ -z "$FILE" ]; then
+            echo "::error::xmake.lua not found anywhere in the repository (also not inside any .zip)"
             find . -not -path "./.git/*" | head -50
             exit 1
           fi
+
           DIR=$(dirname "$FILE")
           echo "Found $FILE -> project dir: $DIR"
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
